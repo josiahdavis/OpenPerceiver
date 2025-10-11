@@ -1,0 +1,7 @@
+torch_optimizer
+einops
+tensorboard
+tqdm
+torch
+torchvision
+lightning
