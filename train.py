@@ -13,15 +13,27 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 from torchvision.models import resnet50
 
+from model import Perceiver
+
 torch.set_float32_matmul_precision("high")
 
 class ImageNetConfig:
     learning_rate = 0.004
     weight_decay = 0.05
-    batch_size = 128
+    batch_size = 32
     max_epochs = 120
-    accumulate_grad_batches = 1
+    accumulate_grad_batches = 2
     data_dir = "data/imagenet"
+    num_freq_bands = 64
+    max_freq = 224
+    depth = 2
+    num_latents = 512
+    latent_dim = 1024
+    cross_heads = 1
+    cross_dim_head = 261
+    latent_heads = 8
+    latent_dim_head = 64
+    self_per_cross_attn = 4
 
 # ---------
 # TRAINER
@@ -32,11 +44,26 @@ class ModelTrainer(L.LightningModule):
         super().__init__()
         self.learning_rate = config.learning_rate
         self.weight_decay = config.weight_decay
-        self.model = resnet50(weights=None)
+        self.model = Perceiver(
+            input_channels=3,
+            input_axis=2,
+            num_freq_bands=config.num_freq_bands,
+            max_freq=config.max_freq,
+            depth=config.depth,
+            num_latents=config.num_latents,
+            latent_dim=config.latent_dim,
+            cross_heads=config.cross_heads,
+            latent_heads=config.latent_heads,
+            cross_dim_head=config.cross_dim_head,
+            latent_dim_head=config.latent_dim_head,
+            num_classes=1000,
+            self_per_cross_attn=config.self_per_cross_attn,
+        )
         self.criterion = torch.nn.CrossEntropyLoss()
 
     def training_step(self, batch):
         inputs, labels = batch
+        inputs = inputs.permute(0, 2, 3, 1)
         outputs = self.model(inputs)
         loss = self.criterion(outputs, labels)
         _, preds = torch.max(outputs, 1)
@@ -48,6 +75,7 @@ class ModelTrainer(L.LightningModule):
 
     def validation_step(self, batch):
         inputs, labels = batch
+        inputs = inputs.permute(0, 2, 3, 1)
         outputs = self.model(inputs)
         loss = self.criterion(outputs, labels)
         self.log("val_loss", loss)
