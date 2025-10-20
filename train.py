@@ -1,63 +1,53 @@
 import os
-from datetime import datetime
-from zoneinfo import ZoneInfo
 
 import lightning as L
 import torch
 import torch_optimizer as optim
 import torchvision
 import torchvision.transforms as transforms
-from torchvision.transforms import InterpolationMode
-from lightning.pytorch.loggers import TensorBoardLogger
+from lightning.pytorch.cli import LightningCLI
 from torch.utils.data import DataLoader
 from torchvision import transforms
-from torchvision.models import resnet50
+from torchvision.transforms import InterpolationMode
 
 from model import Perceiver
 
 torch.set_float32_matmul_precision("high")
 
-class ImageNetConfig:
-    learning_rate = 0.004
-    weight_decay = 0.05
-    batch_size = 32
-    max_epochs = 120
-    accumulate_grad_batches = 2
-    data_dir = "data/imagenet"
-    num_freq_bands = 64
-    max_freq = 224
-    depth = 2
-    num_latents = 512
-    latent_dim = 1024
-    cross_heads = 1
-    cross_dim_head = 261
-    latent_heads = 8
-    latent_dim_head = 64
-    self_per_cross_attn = 4
+# ---------
+# Model
+# ---------
 
-# ---------
-# TRAINER
-# ---------
 
 class ModelTrainer(L.LightningModule):
-    def __init__(self, config):
+    def __init__(
+        self,
+        learning_rate: float,
+        weight_decay: float,
+        num_freq_bands: int,
+        max_freq: int,
+        depth: int,
+        num_latents: int,
+        latent_dim: int,
+        self_per_cross_attn: int,
+    ):
         super().__init__()
-        self.learning_rate = config.learning_rate
-        self.weight_decay = config.weight_decay
+        self.learning_rate = learning_rate
+        self.weight_decay = weight_decay
         self.model = Perceiver(
             input_channels=3,
             input_axis=2,
-            num_freq_bands=config.num_freq_bands,
-            max_freq=config.max_freq,
-            depth=config.depth,
-            num_latents=config.num_latents,
-            latent_dim=config.latent_dim,
-            cross_heads=config.cross_heads,
-            latent_heads=config.latent_heads,
-            cross_dim_head=config.cross_dim_head,
-            latent_dim_head=config.latent_dim_head,
+            num_freq_bands=num_freq_bands,
+            max_freq=max_freq,
+            depth=depth,
+            num_latents=num_latents,
+            latent_dim=latent_dim,
+            cross_heads=1,
+            latent_heads=8,
+            cross_dim_head=261,
+            latent_dim_head=64,
             num_classes=1000,
-            self_per_cross_attn=config.self_per_cross_attn,
+            self_per_cross_attn=self_per_cross_attn,
         )
         self.criterion = torch.nn.CrossEntropyLoss()
 
@@ -102,16 +92,18 @@ class ModelTrainer(L.LightningModule):
         current_lr = self.optimizers().param_groups[0]["lr"]
         self.log("learning_rate", current_lr)
 
+
 # ---------
 # DATA
 # ---------
 
+
 class ImageNetData(L.LightningDataModule):
-    def __init__(self, config):
+    def __init__(self, batch_size: int, data_dir: str):
         super().__init__()
-        self.batch_size = config.batch_size
+        self.batch_size = batch_size
         self.num_workers = 8
-        self.data_dir = config.data_dir
+        self.data_dir = data_dir
 
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
@@ -134,6 +126,7 @@ class ImageNetData(L.LightningDataModule):
                 normalize,
             ]
         )
+
     def train_dataloader(self):
         train_dataset = torchvision.datasets.ImageFolder(os.path.join(self.data_dir, "train"), transform=self.train_transform)
         return DataLoader(train_dataset, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True, shuffle=True, drop_last=True)
@@ -142,16 +135,6 @@ class ImageNetData(L.LightningDataModule):
         val_dataset = torchvision.datasets.ImageFolder(os.path.join(self.data_dir, "val"), transform=self.val_transform)
         return DataLoader(val_dataset, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True, drop_last=True)
 
+
 if __name__ == "__main__":
-    config = ImageNetConfig()
-    central_time = datetime.now(ZoneInfo("America/Chicago"))
-    formatted_time = central_time.strftime("%Y-%m-%d__%I-%M-%S__%p-%Z")
-    if int(os.getenv("LOCAL_RANK", 0)) == 0:
-        print(f"EXP_NAME=training__{formatted_time}")
-    tb_logger = TensorBoardLogger("lightning_logs_0", name=f"training__{formatted_time}")
-    model = ModelTrainer(config)
-    data = ImageNetData(config)
-    trainer = L.Trainer(
-        max_epochs=config.max_epochs, accelerator="auto", strategy="auto", accumulate_grad_batches=config.accumulate_grad_batches, logger=[tb_logger]
-    )
-    trainer.fit(model, data)
+    cli = LightningCLI(model_class=ModelTrainer, datamodule_class=ImageNetData, save_config_callback=None)

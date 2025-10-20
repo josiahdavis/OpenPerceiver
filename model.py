@@ -245,15 +245,13 @@ if __name__ == "__main__":
     )
 
     total_params = sum(p.numel() for p in model.parameters())
-    print(f"Defined Perceiver with: {total_params:,} params.")
+    expected_params = 8_283_740
+    print(f"Parameters: {total_params==expected_params}")
     img = torch.randn(1, 224, 224, 3)  # 1 imagenet image
     output = model(img)  # (1, 1000)
-    print(f"Data output {output.shape=}")
     expected1 = torch.tensor([[ 0.35286993,  0.20621315,  0.65644026,  0.16436583, -0.48988134]])
     expected2 = torch.tensor([[ 0.15717259,  1.01213932, -0.67046762, -0.22867519, -0.03702682]])
     output1 = output[:, 5:10]
     output2 = output[:, 65:70]
     print(f"Perceiver 1: {torch.allclose(output1, expected1)}")
-    print(f"Perceiver 1: \n{output1=}, \n{expected1}")
     print(f"Perceiver 2: {torch.allclose(output2, expected2)}")
-    print(f"Perceiver 2: \n{output2=}, \n{expected2}")
