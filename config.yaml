@@ -20,6 +20,7 @@ model:
   num_latents: 512
   latent_dim: 512
   self_per_cross_attn: 4
+  compile: true
 data:
   batch_size: 32
   data_dir: "data/imagenet"

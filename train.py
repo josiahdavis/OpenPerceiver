@@ -30,6 +30,7 @@ class ModelTrainer(L.LightningModule):
         num_latents: int,
         latent_dim: int,
         self_per_cross_attn: int,
+        compile: bool = False
     ):
         super().__init__()
         self.learning_rate = learning_rate
@@ -49,6 +50,8 @@ class ModelTrainer(L.LightningModule):
             num_classes=1000,
             self_per_cross_attn=self_per_cross_attn,
         )
+        if compile:
+            self.model = torch.compile(self.model)
         self.criterion = torch.nn.CrossEntropyLoss()
 
     def training_step(self, batch):
