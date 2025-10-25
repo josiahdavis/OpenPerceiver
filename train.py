@@ -35,6 +35,9 @@ class ModelTrainer(L.LightningModule):
         super().__init__()
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
+        latent_heads = 8
+        assert latent_dim % latent_heads == 0, 'latent_dim not divisible by latent_dim_head'
+        latent_dim_head = latent_dim // 8
         self.model = Perceiver(
             input_channels=3,
             input_axis=2,
@@ -44,9 +47,9 @@ class ModelTrainer(L.LightningModule):
             num_latents=num_latents,
             latent_dim=latent_dim,
             cross_heads=1,
-            latent_heads=8,
+            latent_heads=latent_heads,
             cross_dim_head=261,
-            latent_dim_head=64,
+            latent_dim_head=latent_dim_head,
             num_classes=1000,
             self_per_cross_attn=self_per_cross_attn,
         )
@@ -140,4 +143,4 @@ class ImageNetData(L.LightningDataModule):
 
 
 if __name__ == "__main__":
-    cli = LightningCLI(model_class=ModelTrainer, datamodule_class=ImageNetData, save_config_callback=None)
+    cli = LightningCLI(model_class=ModelTrainer, datamodule_class=ImageNetData)
