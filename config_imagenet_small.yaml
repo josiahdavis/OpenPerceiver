@@ -1,0 +1,26 @@
+seed_everything: 42
+trainer:
+  max_epochs: 120
+  accelerator: auto
+  devices: auto
+  logger:
+    class_path: lightning.pytorch.loggers.tensorboard.TensorBoardLogger
+    init_args:
+      save_dir: "logs/"
+      name: "imagenet_small"
+      version: null
+      default_hp_metric: true
+  accumulate_grad_batches: 2
+model:
+  learning_rate: 0.004
+  weight_decay: 0.05
+  num_freq_bands: 64
+  max_freq: 224
+  depth: 2
+  num_latents: 512
+  latent_dim: 512
+  self_per_cross_attn: 4
+  compile: true
+data:
+  batch_size: 32
+  data_dir: "data/imagenet
