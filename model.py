@@ -131,7 +131,8 @@ class Perceiver(nn.Module):
             cross_dim_head,
             latent_dim_head,
             num_classes,
-            self_per_cross_attn
+            self_per_cross_attn,
+            weight_share=False,
    ):
         super().__init__()
         self.max_freq = max_freq
@@ -143,19 +144,32 @@ class Perceiver(nn.Module):
         # normal distribution with mean 0, standard deviation 0.02, 
         # and truncation bounds [-2, 2].
         self.latents = nn.Parameter((torch.randn(num_latents, latent_dim) * 0.02).clamp(-2., 2.))
+        if weight_share:
+            shared_cross_attn = CrossAttention(latent_dim, context_dim, cross_heads, cross_dim_head)
+            shared_cross_ff = FeedForward(latent_dim)
+            shared_lat_attns = nn.ModuleList([SelfAttention(latent_dim, latent_heads, latent_dim_head) for _ in range(self_per_cross_attn)])
+            shared_lat_ffs = nn.ModuleList([FeedForward(latent_dim) for _ in range(self_per_cross_attn)])
+
         self.layers = nn.ModuleList([])
-        for _ in range(depth):
+        for i in range(depth):
+            
+            # Self Attention
+            # Optionally, weights for all latent transformers are shared
             lat_attns = nn.ModuleList([])
-            for _ in range(self_per_cross_attn):
+            for j in range(self_per_cross_attn):
                 lat_attns.append(nn.ModuleList([
-                    SelfAttention(latent_dim, latent_heads, latent_dim_head),
-                    FeedForward(latent_dim)
+                    shared_lat_attns[j] if weight_share else SelfAttention(latent_dim, latent_heads, latent_dim_head),
+                    shared_lat_ffs[j] if weight_share else FeedForward(latent_dim)
                 ]))
-            self.layers.append(nn.ModuleList([
-                CrossAttention(latent_dim, context_dim, cross_heads, cross_dim_head),
-                FeedForward(latent_dim),
-                lat_attns
-            ]))
+
+            # Cross Attention            
+            # Optionally, weights for cross attention are shared after first block
+            cross_attn = shared_cross_attn if weight_share and i > 0 else CrossAttention(latent_dim, context_dim, cross_heads, cross_dim_head)
+            cross_ff = shared_cross_ff if weight_share and i > 0 else FeedForward(latent_dim)
+
+            # Create block
+            self.layers.append(nn.ModuleList([cross_attn, cross_ff, lat_attns]))
+
         self.to_logits = nn.Sequential(
             Reduce('b n d -> b d', 'mean'),
             nn.LayerNorm(latent_dim),
@@ -255,3 +269,46 @@ if __name__ == "__main__":
     output2 = output[:, 65:70]
     print(f"Perceiver 1: {torch.allclose(output1, expected1)}")
     print(f"Perceiver 2: {torch.allclose(output2, expected2)}")
+
+    # ------------------------
+    # Testing Model Size
+    # ------------------------
+    model = Perceiver(
+        input_channels=3,
+        input_axis=2,
+        num_freq_bands=64,
+        max_freq=224,
+        depth=8,
+        num_latents=512,
+        latent_dim=1024,
+        cross_heads=1,
+        latent_heads=8,
+        cross_dim_head=261,
+        latent_dim_head=128,
+        num_classes=1000,
+        self_per_cross_attn=6,
+        weight_share=False
+    )
+    total_params = sum(p.numel() for p in model.parameters())
+    expected = 326_090_184
+    print(f"Parameters (w/no Weight Sharing): {total_params:,} {expected==total_params}")
+
+    model = Perceiver(
+        input_channels=3,
+        input_axis=2,
+        num_freq_bands=64,
+        max_freq=224,
+        depth=8,
+        num_latents=512,
+        latent_dim=1024,
+        cross_heads=1,
+        latent_heads=8,
+        cross_dim_head=261,
+        latent_dim_head=128,
+        num_classes=1000,
+        self_per_cross_attn=6,
+        weight_share=True
+    )
+    total_params = sum(p.numel() for p in model.parameters())
+    expected = 44_894_304
+    print(f"Parameters (with Weight Sharing): {total_params:,} {expected==total_params}")

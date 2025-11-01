@@ -30,6 +30,7 @@ class ModelTrainer(L.LightningModule):
         num_latents: int,
         latent_dim: int,
         self_per_cross_attn: int,
+        weight_share: bool = False,
         compile: bool = False
     ):
         super().__init__()
@@ -52,6 +53,7 @@ class ModelTrainer(L.LightningModule):
             latent_dim_head=latent_dim_head,
             num_classes=1000,
             self_per_cross_attn=self_per_cross_attn,
+            weight_share=weight_share
         )
         if compile:
             self.model = torch.compile(self.model)
