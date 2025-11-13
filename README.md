@@ -10,7 +10,7 @@ pip install -r requirements.txt
 
 ## Training on ImageNet
 
-You can use this [data download script](https://github.com/pytorch/examples/blob/main/imagenet/extract_ILSVRC.sh) to download ImageNet.
+After downloading ImageNet [here](https://www.image-net.org/) you can use [this script](https://github.com/pytorch/examples/blob/main/imagenet/extract_ILSVRC.sh) to extract the data.
 
 **Training scaled-down version**
 
