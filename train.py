@@ -85,7 +85,16 @@ class ModelTrainer(L.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        optimizer = optim.Lamb(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
+        no_decay = ['bias', 'norm.weight', 'norm_context.weight']
+        param_dict = {n: p for n, p in self.named_parameters() if p.requires_grad}
+        decay_params = [p for n, p in param_dict.items() if not any(nd in n for nd in no_decay)]
+        no_decay_params = [p for n, p in param_dict.items() if any(nd in n for nd in no_decay)]
+
+        optimizer_grouped_params = [
+            {'params': decay_params, 'weight_decay': self.weight_decay},
+            {'params': no_decay_params, 'weight_decay': 0.0}
+        ]
+        optimizer = optim.Lamb(optimizer_grouped_params, lr=self.learning_rate, weight_decay=self.weight_decay)
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[84, 102, 114], gamma=0.1)  # Factor of 10 reduction (multiply by 0.1)
         return {
             "optimizer": optimizer,
@@ -104,7 +113,6 @@ class ModelTrainer(L.LightningModule):
 # ---------
 # DATA
 # ---------
-
 
 class ImageNetData(L.LightningDataModule):
     def __init__(self, batch_size: int, data_dir: str):
