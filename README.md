@@ -1,6 +1,6 @@
 # Open Perceiver
 
-Perceiver ([Jaegle et. al., 2021](https://arxiv.org/abs/2103.03206)) is a modifcation to the Transformer Decoder to flexibly handle inputs with large size. In this repository we replicate end-to-end trianing on ImageNet.
+Perceiver ([Jaegle et al., 2021](https://arxiv.org/abs/2103.03206)) is a modifcation to the Transformer Decoder to flexibly handle inputs with large size. In this repository we replicate end-to-end trianing on ImageNet.
 
 ## Setup
 
