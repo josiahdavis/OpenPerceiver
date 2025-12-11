@@ -23,4 +23,4 @@ model:
   compile: true
 data:
   batch_size: 32
-  data_dir: "data/imagenet
+  data_dir: "data/imagenet"
