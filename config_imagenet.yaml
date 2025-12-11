@@ -7,13 +7,13 @@ trainer:
     class_path: lightning.pytorch.loggers.tensorboard.TensorBoardLogger
     init_args:
       save_dir: "logs/"
-      name: "imagenet_8_cross_attend_share_gd_params_1024bs"
+      name: "imagenet_8_cross_attend_share_grouped_1024bs_wd_02"
       version: null
       default_hp_metric: true
   accumulate_grad_batches: 16
 model:
   learning_rate: 0.004
-  weight_decay: 0.01
+  weight_decay: 0.02
   num_freq_bands: 64
   max_freq: 224
   depth: 8
@@ -22,6 +22,7 @@ model:
   self_per_cross_attn: 6
   weight_share: true
   compile: true
+  decay_all: false
 data:
   batch_size: 8
   data_dir: "data/imagenet"

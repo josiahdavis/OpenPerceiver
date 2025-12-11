@@ -31,11 +31,13 @@ class ModelTrainer(L.LightningModule):
         latent_dim: int,
         self_per_cross_attn: int,
         weight_share: bool = False,
-        compile: bool = False
+        compile: bool = False,
+        decay_all: bool = True
     ):
         super().__init__()
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
+        self.decay_all = decay_all
         latent_heads = 8
         assert latent_dim % latent_heads == 0, 'latent_dim not divisible by latent_dim_head'
         latent_dim_head = latent_dim // 8
@@ -85,16 +87,19 @@ class ModelTrainer(L.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        no_decay = ['bias', 'norm.weight', 'norm_context.weight']
-        param_dict = {n: p for n, p in self.named_parameters() if p.requires_grad}
-        decay_params = [p for n, p in param_dict.items() if not any(nd in n for nd in no_decay)]
-        no_decay_params = [p for n, p in param_dict.items() if any(nd in n for nd in no_decay)]
+        if self.decay_all:
+            optimizer = optim.Lamb(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
+        else:
+            no_decay = ['bias', 'norm.weight', 'norm_context.weight']
+            param_dict = {n: p for n, p in self.named_parameters() if p.requires_grad}
+            decay_params = [p for n, p in param_dict.items() if not any(nd in n for nd in no_decay)]
+            no_decay_params = [p for n, p in param_dict.items() if any(nd in n for nd in no_decay)]
 
-        optimizer_grouped_params = [
-            {'params': decay_params, 'weight_decay': self.weight_decay},
-            {'params': no_decay_params, 'weight_decay': 0.0}
-        ]
-        optimizer = optim.Lamb(optimizer_grouped_params, lr=self.learning_rate, weight_decay=self.weight_decay)
+            optimizer_grouped_params = [
+                {'params': decay_params, 'weight_decay': self.weight_decay},
+                {'params': no_decay_params, 'weight_decay': 0.0}
+            ]
+            optimizer = optim.Lamb(optimizer_grouped_params, lr=self.learning_rate)
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[84, 102, 114], gamma=0.1)  # Factor of 10 reduction (multiply by 0.1)
         return {
             "optimizer": optimizer,
