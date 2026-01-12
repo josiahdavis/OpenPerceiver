@@ -32,13 +32,16 @@ class ModelTrainer(L.LightningModule):
         self_per_cross_attn: int,
         weight_share: bool = False,
         compile: bool = False,
-        decay_all: bool = True
+        decay_all: bool = True,
+        lamb: bool = True,
+        label_smoothing: float = 0.0
     ):
         super().__init__()
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.decay_all = decay_all
         latent_heads = 8
+        self.lamb = lamb
         assert latent_dim % latent_heads == 0, 'latent_dim not divisible by latent_dim_head'
         latent_dim_head = latent_dim // 8
         self.model = Perceiver(
@@ -59,7 +62,7 @@ class ModelTrainer(L.LightningModule):
         )
         if compile:
             self.model = torch.compile(self.model)
-        self.criterion = torch.nn.CrossEntropyLoss()
+        self.criterion = torch.nn.CrossEntropyLoss(label_smoothing=label_smoothing)
 
     def training_step(self, batch):
         inputs, labels = batch
@@ -88,18 +91,21 @@ class ModelTrainer(L.LightningModule):
 
     def configure_optimizers(self):
         if self.decay_all:
-            optimizer = optim.Lamb(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
+            optimizer_params = self.parameters()
         else:
             no_decay = ['bias', 'norm.weight', 'norm_context.weight']
             param_dict = {n: p for n, p in self.named_parameters() if p.requires_grad}
             decay_params = [p for n, p in param_dict.items() if not any(nd in n for nd in no_decay)]
             no_decay_params = [p for n, p in param_dict.items() if any(nd in n for nd in no_decay)]
 
-            optimizer_grouped_params = [
+            optimizer_params = [
                 {'params': decay_params, 'weight_decay': self.weight_decay},
                 {'params': no_decay_params, 'weight_decay': 0.0}
             ]
-            optimizer = optim.Lamb(optimizer_grouped_params, lr=self.learning_rate)
+        if self.lamb:
+            optimizer = optim.Lamb(optimizer_params, betas=(0.9, 0.999), eps=1e-06, lr=self.learning_rate)
+        else:
+            optimizer = torch.optim.AdamW(optimizer_params, lr=self.learning_rate, betas=(0.9, 0.999), eps=1e-06, weight_decay=self.weight_decay)
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[84, 102, 114], gamma=0.1)  # Factor of 10 reduction (multiply by 0.1)
         return {
             "optimizer": optimizer,
@@ -132,7 +138,6 @@ class ImageNetData(L.LightningDataModule):
             [
                 transforms.RandomResizedCrop(224, scale=(0.08, 1), ratio=(0.75, 1.33333), interpolation=InterpolationMode.BICUBIC),
                 transforms.RandomHorizontalFlip(),
-                transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.2),
                 transforms.RandAugment(num_ops=2, magnitude=9),
                 transforms.ToTensor(),
                 normalize,
