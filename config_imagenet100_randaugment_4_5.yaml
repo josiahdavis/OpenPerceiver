@@ -1,0 +1,38 @@
+# ImageNet-100 experiment
+# Expected runtime: ~7-8 hours on 8xA100
+# Purpose: Validate training dynamics on 100-class subset before full-scale run
+seed_everything: 42
+trainer:
+  gradient_clip_val: 1.0
+  gradient_clip_algorithm: "norm"
+  max_epochs: 30  # Reduced for faster iteration
+  accelerator: auto
+  devices: auto
+  logger:
+    class_path: lightning.pytorch.loggers.tensorboard.TensorBoardLogger
+    init_args:
+      save_dir: "logs/"
+      name: "imagenet100_randaugment_4_5"
+      version: null
+      default_hp_metric: true
+  accumulate_grad_batches: 16
+model:
+  learning_rate: 0.004  # Paper value
+  weight_decay: 0.01
+  num_freq_bands: 64
+  max_freq: 224
+  depth: 8
+  num_latents: 512
+  latent_dim: 1024
+  self_per_cross_attn: 6
+  weight_share: true
+  compile: true
+  decay_all: false
+  lamb: true
+  label_smoothing: 0.0
+  num_classes: 100  # ImageNet-100 subset
+data:
+  batch_size: 8
+  data_dir: "data/imagenet100"  # ImageNet-100 subset
+  num_ops: 4          # Used in PerceiverIO
+  magnitude: 5        # Used in PerceiverIO
