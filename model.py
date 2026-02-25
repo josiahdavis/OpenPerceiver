@@ -1,10 +1,11 @@
 # Modified from Phil Wang's implementation: https://github.com/lucidrains/perceiver-pytorch
 
 import torch
+import torch.nn.functional as F
 from einops import rearrange, repeat
 from einops.layers.torch import Reduce
 from math import pi
-from torch import nn, einsum
+from torch import nn
 
 def positional_encode(x):
     """
@@ -74,7 +75,6 @@ class SelfAttention(nn.Module):
     def __init__(self, query_dim, heads=8, dim_head=64):
         super().__init__()
         inner_dim = dim_head * heads
-        self.scale = dim_head ** -0.5
         self.heads = heads
         self.norm = nn.LayerNorm(query_dim)
         self.to_qkv = nn.Linear(query_dim, inner_dim * 3, bias=False)
@@ -84,18 +84,15 @@ class SelfAttention(nn.Module):
         h = self.heads
         x = self.norm(x)
         q, k, v = self.to_qkv(x).chunk(3, dim=-1)
-        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h=h), (q, k, v))
-        sim = einsum('b i d, b j d -> b i j', q, k) * self.scale
-        attn = sim.softmax(dim=-1)
-        out = einsum('b i j, b j d -> b i d', attn, v)
-        out = rearrange(out, '(b h) n d -> b n (h d)', h=h)
+        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=h), (q, k, v))
+        out = F.scaled_dot_product_attention(q, k, v)
+        out = rearrange(out, 'b h n d -> b n (h d)')
         return self.to_out(out)
 
 class CrossAttention(nn.Module):
     def __init__(self, query_dim, context_dim, heads=1, dim_head=261):
         super().__init__()
         inner_dim = dim_head * heads
-        self.scale = dim_head ** -0.5
         self.heads = heads
         self.norm_context = nn.LayerNorm(context_dim)
         self.norm = nn.LayerNorm(query_dim)
@@ -109,11 +106,9 @@ class CrossAttention(nn.Module):
         context = self.norm_context(context)
         q = self.to_q(x)
         k, v = self.to_kv(context).chunk(2, dim=-1)
-        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h=h), (q, k, v))
-        sim = einsum('b i d, b j d -> b i j', q, k) * self.scale
-        attn = sim.softmax(dim=-1)
-        out = einsum('b i j, b j d -> b i d', attn, v)
-        out = rearrange(out, '(b h) n d -> b n (h d)', h=h)
+        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=h), (q, k, v))
+        out = F.scaled_dot_product_attention(q, k, v)
+        out = rearrange(out, 'b h n d -> b n (h d)')
         return self.to_out(out)
 
 class Perceiver(nn.Module):
