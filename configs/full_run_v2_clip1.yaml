@@ -1,0 +1,54 @@
+# Latest iteration to try and get bf16-mixed working 
+# This is currently diverging around Epoch 21
+# One possible reason: LAMB's trust ratio instability in bf16
+seed_everything: 42
+trainer:
+  gradient_clip_val: 1.0
+  gradient_clip_algorithm: "norm"
+  max_epochs: 120
+  precision: bf16-mixed
+  accelerator: auto
+  devices: auto
+  logger:
+    class_path: lightning.pytorch.loggers.tensorboard.TensorBoardLogger
+    init_args:
+      save_dir: "logs/"
+      name: "full_run_v2_clip1"
+      version: null
+      default_hp_metric: true
+  accumulate_grad_batches: 16  # effective BS = 8 * 16 * 8 = 1024
+  callbacks:
+    - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+      init_args:
+        monitor: "val_acc"
+        mode: "max"
+        save_top_k: 3
+        filename: "epoch{epoch:03d}-val_acc{val_acc:.4f}"
+        auto_insert_metric_name: false
+    - class_path: lightning.pytorch.callbacks.EarlyStopping
+      init_args:
+        monitor: "val_loss"
+        mode: "min"
+        patience: 10            # Stop if val_loss doesn't improve for 10 epochs
+        min_delta: 0.0
+        verbose: true
+model:
+  learning_rate: 0.004
+  weight_decay: 0.01
+  num_freq_bands: 64
+  max_freq: 224
+  depth: 8
+  num_latents: 512
+  latent_dim: 1024
+  self_per_cross_attn: 6
+  weight_share: true
+  compile: true
+  decay_all: false
+  lamb: true
+  label_smoothing: 0.0
+  milestones: [84, 102, 114]
+data:
+  batch_size: 8
+  data_dir: "data/imagenet"
+  num_ops: 2
+  magnitude: 9

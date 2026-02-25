@@ -35,13 +35,15 @@ class ModelTrainer(L.LightningModule):
         decay_all: bool = True,
         lamb: bool = True,
         label_smoothing: float = 0.0,
-        num_classes: int = 1000
+        num_classes: int = 1000,
+        milestones: list[int] = [84, 102, 114],
     ):
         super().__init__()
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.decay_all = decay_all
         self.lamb = lamb
+        self.milestones = milestones
         # Store model hyperparameters for logging
         self.num_freq_bands = num_freq_bands
         self.max_freq = max_freq
@@ -124,6 +126,13 @@ class ModelTrainer(L.LightningModule):
             self.logger.experiment.add_scalar("val_loss_by_samples", val_loss, global_step=samples_seen)
         if val_acc is not None:
             self.logger.experiment.add_scalar("val_acc_by_samples", val_acc, global_step=samples_seen)
+    
+        # Print validation summary to console for easy monitoring
+        if self.trainer.is_global_zero:
+            epoch = self.current_epoch
+            loss_str = f"{val_loss.item():.4f}" if val_loss is not None else "N/A"
+            acc_str = f"{val_acc.item() * 100:.2f}%" if val_acc is not None else "N/A"
+            print(f"\n>>> Epoch {epoch} | val_loss: {loss_str} | val_acc: {acc_str} | samples_seen: {samples_seen:,}")
 
     def configure_optimizers(self):
         if self.decay_all:
@@ -142,7 +151,7 @@ class ModelTrainer(L.LightningModule):
             optimizer = optim.Lamb(optimizer_params, betas=(0.9, 0.999), eps=1e-06, lr=self.learning_rate)
         else:
             optimizer = torch.optim.AdamW(optimizer_params, lr=self.learning_rate, betas=(0.9, 0.999), eps=1e-06, weight_decay=self.weight_decay)
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[84, 102, 114], gamma=0.1)  # Factor of 10 reduction (multiply by 0.1)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=self.milestones, gamma=0.1)  # Factor of 10 reduction (multiply by 0.1)
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
@@ -199,10 +208,10 @@ class ModelTrainer(L.LightningModule):
 # ---------
 
 class ImageNetData(L.LightningDataModule):
-    def __init__(self, batch_size: int, data_dir: str, num_ops: int = 2, magnitude: int = 9):
+    def __init__(self, batch_size: int, data_dir: str, num_ops: int = 2, magnitude: int = 9, num_workers: int = 12):
         super().__init__()
         self.batch_size = batch_size
-        self.num_workers = 8
+        self.num_workers = num_workers
         self.data_dir = data_dir
         self.num_ops = num_ops
         self.magnitude = magnitude
@@ -230,11 +239,11 @@ class ImageNetData(L.LightningDataModule):
 
     def train_dataloader(self):
         train_dataset = torchvision.datasets.ImageFolder(os.path.join(self.data_dir, "train"), transform=self.train_transform)
-        return DataLoader(train_dataset, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True, shuffle=True, drop_last=True)
+        return DataLoader(train_dataset, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True, shuffle=True, drop_last=True, persistent_workers=True, prefetch_factor=3)
 
     def val_dataloader(self):
         val_dataset = torchvision.datasets.ImageFolder(os.path.join(self.data_dir, "val"), transform=self.val_transform)
-        return DataLoader(val_dataset, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True, drop_last=True)
+        return DataLoader(val_dataset, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True, drop_last=True, persistent_workers=True, prefetch_factor=3)
 
 
 if __name__ == "__main__":
